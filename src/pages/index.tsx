@@ -10,36 +10,49 @@ import {
   TableHeader,
   TableRow,
 } from "~/components/ui/table";
+import { UnitTypes } from "~/components/ui/views/unitType";
+import { toast } from "~/components/ui/use-toast";
+
 import { fetchData } from "~/utils";
-import type { ReturnType } from "./api/voyage/getAll";
+import type { VoyageReturnType } from "./api/voyage/getAll";
+
 import { Button } from "~/components/ui/button";
 import { TABLE_DATE_FORMAT } from "~/constants";
 
+import { VoyageForm } from "~/components/ui/form/voyage";
+import type { VoyageCustomValidators } from "~/prismaTypes";
+
 export default function Home() {
-  const { data: voyages } = useQuery<ReturnType>(["voyages"], () =>
+  const { data: voyages } = useQuery<VoyageReturnType>(["voyages"], () =>
     fetchData("voyage/getAll")
   );
 
   const queryClient = useQueryClient();
-  const mutation = useMutation(
-    async (voyageId: string) => {
-      const response = await fetch(`/api/voyage/delete?id=${voyageId}`, {
-        method: "DELETE",
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to delete the voyage");
-      }
+  const onDelete = useMutation(deleteVoyage, {
+    onSuccess: async () => {
+      await queryClient.invalidateQueries(["voyages"]);
     },
-    {
-      onSuccess: async () => {
-        await queryClient.invalidateQueries(["voyages"]);
-      },
-    }
-  );
+  });
 
+  const onAdd = useMutation(addVoyage, {
+    onSuccess: async () => {
+      toast({
+        title: "Success!",
+        description: (
+          <pre className="w-[340px] rounded-md bg-slate-950 p-4">
+            <code className="text-white">Voyage has been added</code>
+          </pre>
+        ),
+      });
+      await queryClient.invalidateQueries(["voyages"]);
+    },
+  });
+
+  const handleCreate = (data: VoyageCustomValidators) => {
+    onAdd.mutate(data);
+  };
   const handleDelete = (voyageId: string) => {
-    mutation.mutate(voyageId);
+    onDelete.mutate(voyageId);
   };
 
   return (
@@ -52,11 +65,17 @@ export default function Home() {
         <Table>
           <TableHeader>
             <TableRow>
+              <TableCell>
+                  <VoyageForm handleSubmit={handleCreate} />
+              </TableCell>
+            </TableRow>
+            <TableRow>
               <TableHead>Departure</TableHead>
               <TableHead>Arrival</TableHead>
               <TableHead>Port of loading</TableHead>
               <TableHead>Port of discharge</TableHead>
               <TableHead>Vessel</TableHead>
+              <TableHead>Unit types</TableHead>
               <TableHead>&nbsp;</TableHead>
             </TableRow>
           </TableHeader>
@@ -76,6 +95,9 @@ export default function Home() {
                 <TableCell>{voyage.portOfDischarge}</TableCell>
                 <TableCell>{voyage.vessel.name}</TableCell>
                 <TableCell>
+                  <UnitTypes unitTypes={voyage.voyageUnitType} />
+                </TableCell>
+                <TableCell>
                   <Button
                     onClick={() => handleDelete(voyage.id)}
                     variant="outline"
@@ -91,3 +113,37 @@ export default function Home() {
     </>
   );
 }
+
+const addVoyage = async (voyage: VoyageCustomValidators) => {
+  const response = await fetch(`/api/voyage/add`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(voyage),
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to add the voyage");
+  }
+};
+
+const deleteVoyage = async (voyageId: string) => {
+  const response = await fetch(`/api/voyage/delete?id=${voyageId}`, {
+    method: "DELETE",
+  });
+
+  if (!response.ok) {
+    toast({
+      title: "Uh oh! Something went wrong",
+      description: (
+        <pre className="w-[340px] rounded-md bg-slate-950 p-4">
+          <code className="text-white">
+            There was a problem with your request
+          </code>
+        </pre>
+      ),
+    });
+    throw new Error("Failed to delete the voyage");
+  }
+};

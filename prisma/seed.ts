@@ -1,4 +1,4 @@
-import { PrismaClient } from "@prisma/client";
+import { Prisma, PrismaClient } from "@prisma/client";
 import { addDays, setHours, startOfHour } from "date-fns";
 
 const prisma = new PrismaClient();
@@ -151,6 +151,8 @@ const unitTypes: UnitType[] = [
   },
 ];
 
+// Math.random (extractUnitTypeIds.length)
+
 async function main() {
   const crownSeaways = await prisma.vessel.create({
     data: {
@@ -164,6 +166,41 @@ async function main() {
     },
   });
 
+  // Seeding units based on the predefined unitTypes array
+  const unitTypesData = [];
+  for (let i = 0; i < 10; i++) {
+    const unitType = unitTypes[i % unitTypes.length]; // Loop back to start if i >= unitTypes.length
+
+    if (unitType) {
+      const unit = await prisma.unitType.create({
+        data: {
+          name: unitType.name,
+          defaultLength: unitType.length, // Using 'length' as default length
+        },
+      });
+
+      unitTypesData.push(unit);
+    }
+  }
+  const extractUnitTypeIds = unitTypesData.map((unitType) => unitType.id);
+
+  function getRandomUnitTypeIds(extractUnitTypeIds: string[], count: number) {
+    const randomIds = [];
+    const availableIds = [...extractUnitTypeIds];
+
+    for (let i = 0; i < count; i++) {
+      const randomIndex = Math.floor(Math.random() * availableIds.length);
+      const randomId = availableIds.splice(randomIndex, 1)[0]!; // Add non-null assertion
+      randomIds.push({
+        unitType: {
+          connect: { id: randomId },
+        },
+      });
+    }
+
+    return randomIds;
+  }
+
   // Seeding voyages
   for (let i = 0; i < 10; i++) {
     const departingFromCopenhagenVessel =
@@ -174,42 +211,41 @@ async function main() {
     const scheduledDeparture = startOfHour(
       setHours(addDays(new Date(), i), 15)
     );
+
     const scheduledArrival = startOfHour(
       setHours(addDays(new Date(), i + 1), 9)
     );
-
-    await prisma.voyage.create({
-      data: {
-        portOfLoading: "Copenhagen",
-        portOfDischarge: "Oslo",
-        vesselId: departingFromCopenhagenVessel,
-        scheduledDeparture,
-        scheduledArrival,
-      },
-    });
-
-    await prisma.voyage.create({
-      data: {
-        portOfLoading: "Oslo",
-        portOfDischarge: "Copenhagen",
-        vesselId: departingFromOsloVessel,
-        scheduledDeparture,
-        scheduledArrival,
-      },
-    });
-  }
-
-  // Seeding units based on the predefined unitTypes array
-  for (let i = 0; i < 10; i++) {
-    const unitType = unitTypes[i % unitTypes.length]; // Loop back to start if i >= unitTypes.length
-
-    unitType &&
-      (await prisma.unitType.create({
+    try {
+      await prisma.voyage.create({
         data: {
-          name: unitType.name,
-          defaultLength: unitType.length, // Using 'length' as default length
+          portOfLoading: "Copenhagen",
+          portOfDischarge: "Oslo",
+          vesselId: departingFromCopenhagenVessel,
+          scheduledDeparture,
+          scheduledArrival,
+          voyageUnitType: {
+            create: getRandomUnitTypeIds(extractUnitTypeIds, 5),
+          },
         },
-      }));
+      });
+      await prisma.voyage.create({
+        data: {
+          portOfLoading: "Oslo",
+          portOfDischarge: "Copenhagen",
+          vesselId: departingFromOsloVessel,
+          scheduledDeparture,
+          scheduledArrival,
+          voyageUnitType: {
+            create: getRandomUnitTypeIds(extractUnitTypeIds, 5),
+          },
+        },
+      });
+    } catch (e) {
+      if (e instanceof Prisma.PrismaClientKnownRequestError) {
+        console.log(e);
+      }
+      throw e;
+    }
   }
 }
 

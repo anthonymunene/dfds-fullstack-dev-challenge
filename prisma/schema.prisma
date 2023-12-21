@@ -2,39 +2,62 @@
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 generator client {
-    provider = "prisma-client-js"
-    seed     = "ts-node prisma/seed.ts"
+  provider = "prisma-client-js"
+  seed     = "ts-node prisma/seed.ts"
+}
+
+generator zod {
+  provider                 = "zod-prisma-types"
+  createInputTypes = false
+  createRelationValuesTypes = true
 }
 
 datasource db {
-    provider = "sqlite"
-    url      = env("DATABASE_URL")
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
 }
 
 model Vessel {
-    id        String   @id @default(cuid())
-    name      String
-    createdAt DateTime @default(now())
-    updatedAt DateTime @updatedAt
-    voyages   Voyage[]
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  voyages   Voyage[]
 }
-
+/// @zod.import(["import { validateIfSamePort, validateArrivalBeforeDeparture } from '../../customImports'"]).superRefine((val, context) => validateIfSamePort(val, context)).superRefine((val, context) => validateArrivalBeforeDeparture(val, context)).strict()
 model Voyage {
-    id                 String   @id @default(cuid())
-    portOfLoading      String
-    portOfDischarge    String
-    vesselId           String
-    scheduledDeparture DateTime
-    scheduledArrival   DateTime
-    vessel             Vessel   @relation(fields: [vesselId], references: [id])
-    createdAt          DateTime @default(now())
-    updatedAt          DateTime @updatedAt
+  /// @zod.custom.omit(["model", "input"])
+  id                 String           @id @default(cuid())
+  portOfLoading      String
+  portOfDischarge    String
+  /// string @zod.string.min(5, { message: "Please select a vessel" })
+  vesselId           String
+  scheduledDeparture DateTime
+  scheduledArrival   DateTime
+  vessel             Vessel           @relation(fields: [vesselId], references: [id],onDelete: Cascade, onUpdate: Cascade)
+  /// @zod.custom.omit(["model", "input"])
+  createdAt          DateTime         @default(now())
+  /// @zod.custom.omit(["model", "input"])
+  updatedAt          DateTime         @updatedAt
+  /// @zod.object.array(.min(5).nonempty())
+  voyageUnitType     VoyageUnitType[]
 }
 
 model UnitType {
-  id                 String   @id @default(cuid())
-  name               String
-  defaultLength      Float
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  id             String           @id @default(cuid())
+  name           String
+  defaultLength  Float
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  voyageUnitType VoyageUnitType[]
+}
+
+model VoyageUnitType {
+  id         String   @id @default(cuid())
+  voyageId   String
+  unitTypeId String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  voyage     Voyage   @relation(fields: [voyageId], references: [id],onDelete: Cascade, onUpdate: Cascade)
+  unitType   UnitType @relation(fields: [unitTypeId], references: [id],onDelete: Cascade, onUpdate: Cascade)
 }
